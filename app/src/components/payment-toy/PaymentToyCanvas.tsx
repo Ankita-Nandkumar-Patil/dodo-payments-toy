@@ -57,6 +57,7 @@ function createProgram(
 
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
+
   gl.linkProgram(program);
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
@@ -71,6 +72,8 @@ function createProgram(
     );
   }
 
+  // Once linked into the program, these shader objects
+  // are no longer needed directly.
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
 
@@ -120,7 +123,10 @@ export default function PaymentToyCanvas() {
       return;
     }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bindBuffer(
+      gl.ARRAY_BUFFER,
+      buffer
+    );
 
     gl.bufferData(
       gl.ARRAY_BUFFER,
@@ -163,7 +169,7 @@ export default function PaymentToyCanvas() {
     );
 
     // --------------------------------
-    // Uniforms
+    // Uniform locations
     // --------------------------------
 
     const resolutionLocation =
@@ -190,6 +196,12 @@ export default function PaymentToyCanvas() {
         "uMethod"
       );
 
+    const chargeLocation =
+      gl.getUniformLocation(
+        program,
+        "uCharge"
+      );
+
     // --------------------------------
     // Runtime values
     // --------------------------------
@@ -201,33 +213,260 @@ export default function PaymentToyCanvas() {
 
     let method = 0;
 
+    const chargeRef = {
+      current: 0,
+    };
+
+    const isHoldingRef = {
+      current: false,
+    };
+
+    let chargeAnimationFrame = 0;
+
     // --------------------------------
-    // Pointer
+    // Mouse / touch position
     // --------------------------------
 
-    const handlePointerMove = (
+    const updatePointerPosition = (
       event: PointerEvent
     ) => {
       const rect =
         canvas.getBoundingClientRect();
 
-      if (rect.width === 0 || rect.height === 0) {
+      if (
+        rect.width === 0 ||
+        rect.height === 0
+      ) {
         return;
       }
 
-      mouse.x =
-        (event.clientX - rect.left) /
-        rect.width;
+      mouse.x = Math.max(
+        0,
+        Math.min(
+          1,
+          (event.clientX - rect.left) /
+            rect.width
+        )
+      );
 
-      mouse.y =
-        1 -
-        (event.clientY - rect.top) /
-          rect.height;
+      mouse.y = Math.max(
+        0,
+        Math.min(
+          1,
+          1 -
+            (event.clientY - rect.top) /
+              rect.height
+        )
+      );
+    };
+
+    const handlePointerMove = (
+      event: PointerEvent
+    ) => {
+      updatePointerPosition(event);
+    };
+
+    // --------------------------------
+    // Start charging
+    // --------------------------------
+
+    const startCharging = (
+      event?: PointerEvent
+    ) => {
+      if (isHoldingRef.current) {
+        return;
+      }
+
+      if (event) {
+        updatePointerPosition(event);
+
+        // Keep receiving pointerup even if
+        // the pointer leaves the canvas.
+        canvas.setPointerCapture(
+          event.pointerId
+        );
+      }
+
+      isHoldingRef.current = true;
+
+      cancelAnimationFrame(
+        chargeAnimationFrame
+      );
+
+      const startCharge =
+        chargeRef.current;
+
+      const startTime =
+        performance.now();
+
+      const chargeDuration = 1200;
+
+      const animateCharge = () => {
+        if (!isHoldingRef.current) {
+          return;
+        }
+
+        const elapsed =
+          performance.now() -
+          startTime;
+
+        const progress = Math.min(
+          elapsed / chargeDuration,
+          1
+        );
+
+        // Ease-in.
+        const eased =
+          progress * progress;
+
+        chargeRef.current =
+          startCharge +
+          (1 - startCharge) *
+            eased;
+
+        if (progress < 1) {
+          chargeAnimationFrame =
+            requestAnimationFrame(
+              animateCharge
+            );
+        } else {
+          chargeRef.current = 1;
+        }
+      };
+
+      chargeAnimationFrame =
+        requestAnimationFrame(
+          animateCharge
+        );
+    };
+
+    // --------------------------------
+    // Spring back
+    // --------------------------------
+
+    const releaseCharging = (
+      event?: PointerEvent
+    ) => {
+      if (!isHoldingRef.current) {
+        return;
+      }
+
+      isHoldingRef.current = false;
+
+      if (
+        event &&
+        canvas.hasPointerCapture(
+          event.pointerId
+        )
+      ) {
+        canvas.releasePointerCapture(
+          event.pointerId
+        );
+      }
+
+      cancelAnimationFrame(
+        chargeAnimationFrame
+      );
+
+      const startCharge =
+        chargeRef.current;
+
+      const startTime =
+        performance.now();
+
+      const springDuration = 500;
+
+      const animateSpring = () => {
+        const elapsed =
+          performance.now() -
+          startTime;
+
+        const progress = Math.min(
+          elapsed / springDuration,
+          1
+        );
+
+        // Smooth ease-out.
+        const eased =
+          1 -
+          Math.pow(
+            1 - progress,
+            3
+          );
+
+        chargeRef.current =
+          startCharge *
+          (1 - eased);
+
+        if (progress < 1) {
+          chargeAnimationFrame =
+            requestAnimationFrame(
+              animateSpring
+            );
+        } else {
+          chargeRef.current = 0;
+        }
+      };
+
+      chargeAnimationFrame =
+        requestAnimationFrame(
+          animateSpring
+        );
+    };
+
+    // --------------------------------
+    // Pointer interaction
+    // --------------------------------
+
+    const handlePointerDown = (
+      event: PointerEvent
+    ) => {
+      // Only react to primary pointer.
+      if (!event.isPrimary) {
+        return;
+      }
+
+      startCharging(event);
+    };
+
+    const handlePointerUp = (
+      event: PointerEvent
+    ) => {
+      if (!event.isPrimary) {
+        return;
+      }
+
+      releaseCharging(event);
+    };
+
+    const handlePointerCancel = (
+      event: PointerEvent
+    ) => {
+      if (!event.isPrimary) {
+        return;
+      }
+
+      releaseCharging(event);
     };
 
     canvas.addEventListener(
       "pointermove",
       handlePointerMove
+    );
+
+    canvas.addEventListener(
+      "pointerdown",
+      handlePointerDown
+    );
+
+    canvas.addEventListener(
+      "pointerup",
+      handlePointerUp
+    );
+
+    canvas.addEventListener(
+      "pointercancel",
+      handlePointerCancel
     );
 
     // --------------------------------
@@ -237,22 +476,48 @@ export default function PaymentToyCanvas() {
     const handleKeyDown = (
       event: KeyboardEvent
     ) => {
-      if (event.key === "1") {
-        method = 0;
+      if (
+        event.key === "1" ||
+        event.key === "2" ||
+        event.key === "3"
+      ) {
+        method =
+          Number(event.key) - 1;
       }
 
-      if (event.key === "2") {
-        method = 1;
-      }
+      if (
+        event.key === " " ||
+        event.key === "Enter"
+      ) {
+        event.preventDefault();
 
-      if (event.key === "3") {
-        method = 2;
+        if (!isHoldingRef.current) {
+          startCharging();
+        }
+      }
+    };
+
+    const handleKeyUp = (
+      event: KeyboardEvent
+    ) => {
+      if (
+        event.key === " " ||
+        event.key === "Enter"
+      ) {
+        event.preventDefault();
+
+        releaseCharging();
       }
     };
 
     window.addEventListener(
       "keydown",
       handleKeyDown
+    );
+
+    window.addEventListener(
+      "keyup",
+      handleKeyUp
     );
 
     // --------------------------------
@@ -300,13 +565,16 @@ export default function PaymentToyCanvas() {
     // --------------------------------
 
     let animationFrameId = 0;
-    const startTime = performance.now();
+
+    const startTime =
+      performance.now();
 
     const render = () => {
       resize();
 
       const elapsed =
-        (performance.now() - startTime) /
+        (performance.now() -
+          startTime) /
         1000;
 
       gl.useProgram(program);
@@ -341,6 +609,13 @@ export default function PaymentToyCanvas() {
         );
       }
 
+      if (chargeLocation) {
+        gl.uniform1f(
+          chargeLocation,
+          chargeRef.current
+        );
+      }
+
       gl.drawArrays(
         gl.TRIANGLES,
         0,
@@ -363,14 +638,38 @@ export default function PaymentToyCanvas() {
         animationFrameId
       );
 
+      cancelAnimationFrame(
+        chargeAnimationFrame
+      );
+
       canvas.removeEventListener(
         "pointermove",
         handlePointerMove
       );
 
+      canvas.removeEventListener(
+        "pointerdown",
+        handlePointerDown
+      );
+
+      canvas.removeEventListener(
+        "pointerup",
+        handlePointerUp
+      );
+
+      canvas.removeEventListener(
+        "pointercancel",
+        handlePointerCancel
+      );
+
       window.removeEventListener(
         "keydown",
         handleKeyDown
+      );
+
+      window.removeEventListener(
+        "keyup",
+        handleKeyUp
       );
 
       gl.deleteBuffer(buffer);
@@ -385,6 +684,9 @@ export default function PaymentToyCanvas() {
         display: "block",
         width: "100%",
         height: "100%",
+        touchAction: "none",
+        userSelect: "none",
+        WebkitUserSelect: "none",
       }}
     />
   );

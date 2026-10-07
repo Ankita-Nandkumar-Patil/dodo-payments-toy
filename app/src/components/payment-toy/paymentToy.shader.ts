@@ -13,6 +13,7 @@ export const fragmentShaderSource = `
   uniform vec2 uMouse;
   uniform float uTime;
   uniform float uMethod;
+  uniform float uCharge;
 
   // --------------------------------
   // Utilities
@@ -299,6 +300,34 @@ export const fragmentShaderSource = `
     vec2 uv =
       gl_FragCoord.xy / uRes;
 
+    // --------------------------------
+    // Charge interaction
+    // --------------------------------
+
+    vec2 chargeUV = uv;
+
+    // Pull the surface toward the cursor
+    // as the user holds.
+    float chargeInfluence =
+    uCharge *
+    (1.0 -
+        smoothstep(
+        0.0,
+        0.65,
+        distance(
+            uv,
+            uMouse
+        )
+        )
+    );
+
+    chargeUV =
+    mix(
+        uv,
+        uMouse,
+        chargeInfluence * 0.12
+    );
+
     vec2 centered =
       uv - 0.5;
 
@@ -355,22 +384,22 @@ export const fragmentShaderSource = `
     // --------------------------------
 
     vec3 card =
-      cardMaterial(
-        objectUV,
-        uMouse
-      );
+        cardMaterial(
+            objectUV + (chargeUV - uv) * 0.5,
+            uMouse
+        );
 
-    vec3 upi =
-      upiMaterial(
-        objectUV,
-        uMouse
-      );
+        vec3 upi =
+        upiMaterial(
+            objectUV + (chargeUV - uv) * 0.5,
+            uMouse
+        );
 
-    vec3 wallet =
-      walletMaterial(
-        objectUV,
-        uMouse
-      );
+        vec3 wallet =
+        walletMaterial(
+            objectUV + (chargeUV - uv) * 0.5,
+            uMouse
+        );
 
     vec3 material;
 
@@ -392,6 +421,26 @@ export const fragmentShaderSource = `
           uMethod - 1.0
         );
     }
+
+    // --------------------------------
+    // Charge energy
+    // --------------------------------
+
+    float chargePulse =
+    sin(
+        uTime * 8.0
+    ) *
+    0.5 +
+    0.5;
+
+    material +=
+    uCharge *
+    chargePulse *
+    vec3(
+        0.08,
+        0.08,
+        0.08
+    );
 
     // --------------------------------
     // Object edge

@@ -25,10 +25,7 @@ const methods: PaymentMethod[] = [
   "wallet",
 ];
 
-const methodLabels: Record<
-  PaymentMethod,
-  string
-> = {
+const methodLabels: Record<PaymentMethod, string> = {
   card: "Card",
   upi: "UPI",
   wallet: "Wallet",
@@ -40,20 +37,20 @@ const stateCopy = {
     subtitle: "Release to cancel",
   },
   charging: {
-    title: "Keep holding",
-    subtitle: "Processing payment...",
+    title: "Processing payment",
+    subtitle: "Keep holding...",
   },
   cancelled: {
     title: "Payment cancelled",
     subtitle: "Hold again to retry",
   },
   success: {
-    title: "Payment successful",
-    subtitle: "Your payment is complete",
+    title: "Payment complete",
+    subtitle: "Your payment was successful",
   },
   failed: {
     title: "Payment failed",
-    subtitle: "Hold again to retry",
+    subtitle: "Try again or use another method",
   },
 } as const;
 
@@ -62,98 +59,60 @@ export default function PaymentToy({
   defaultMethod = "card",
   onPaymentComplete,
 }: PaymentToyProps) {
-  const [paymentState, dispatch] =
-    useReducer(
-      paymentReducer,
-      initialPaymentState
-    );
+  const [paymentState, dispatch] = useReducer(
+    paymentReducer,
+    initialPaymentState
+  );
 
   const [method, setMethod] =
-    useState<PaymentMethod>(
-      defaultMethod
-    );
+    useState<PaymentMethod>(defaultMethod);
 
   const [simulateFailure, setSimulateFailure] =
     useState(false);
 
-  const handleChargeStart =
-    useCallback(() => {
-      dispatch({
-        type: "START_CHARGE",
-      });
-    }, []);
+  const handleChargeStart = useCallback(() => {
+    dispatch({
+      type: "START_CHARGE",
+    });
+  }, []);
 
-  const handleChargeCancel =
-    useCallback(() => {
-      dispatch({
-        type: "CANCEL",
-      });
-    }, []);
+  const handleChargeCancel = useCallback(() => {
+    dispatch({
+      type: "CANCEL",
+    });
+  }, []);
 
-  const handleChargeComplete =
-    useCallback(() => {
-      dispatch({
-        type: simulateFailure
-          ? "FAIL"
-          : "COMPLETE",
-      });
-    }, [simulateFailure]);
+  const handleChargeComplete = useCallback(() => {
+    dispatch({
+      type: simulateFailure ? "FAIL" : "COMPLETE",
+    });
+  }, [simulateFailure]);
 
   useEffect(() => {
-    if (
-      paymentState.status ===
-      "cancelled"
-    ) {
-      const timeout = window.setTimeout(
-        () => {
-          dispatch({
-            type: "RESET",
-          });
-        },
-        900
-      );
+    if (paymentState.status === "cancelled") {
+      const timeout = window.setTimeout(() => {
+        dispatch({ type: "RESET" });
+      }, 900);
 
-      return () => {
-        window.clearTimeout(timeout);
-      };
+      return () => window.clearTimeout(timeout);
     }
 
-    if (
-      paymentState.status ===
-      "success"
-    ) {
+    if (paymentState.status === "success") {
       onPaymentComplete?.(method);
 
-      const timeout = window.setTimeout(
-        () => {
-          dispatch({
-            type: "RESET",
-          });
-        },
-        1800
-      );
+      const timeout = window.setTimeout(() => {
+        dispatch({ type: "RESET" });
+      }, 1800);
 
-      return () => {
-        window.clearTimeout(timeout);
-      };
+      return () => window.clearTimeout(timeout);
     }
 
-    if (
-      paymentState.status ===
-      "failed"
-    ) {
-      const timeout = window.setTimeout(
-        () => {
-          dispatch({
-            type: "RESET",
-          });
-        },
-        1400
-      );
+    if (paymentState.status === "failed") {
+      const timeout = window.setTimeout(() => {
+        dispatch({ type: "RESET" });
+      }, 1600);
 
-      return () => {
-        window.clearTimeout(timeout);
-      };
+      return () => window.clearTimeout(timeout);
     }
   }, [
     paymentState.status,
@@ -175,10 +134,9 @@ export default function PaymentToy({
         </div>
 
         <div className="checkout-header__secure">
-          <span className="checkout-header__lock">
+          <span className="checkout-header__check">
             ✓
           </span>
-
           Secure checkout
         </div>
       </header>
@@ -191,19 +149,16 @@ export default function PaymentToy({
                 Payment
               </span>
 
-              <h1>
-                Complete your payment
-              </h1>
+              <h1>Complete your payment</h1>
 
               <p>
-                Choose how you'd like to
-                pay.
+                Choose how you'd like to pay.
               </p>
             </div>
 
-            <div className="checkout__amount-mobile">
+            <strong className="checkout__mobile-amount">
               ₹{amount}
-            </div>
+            </strong>
           </div>
 
           <div
@@ -211,54 +166,34 @@ export default function PaymentToy({
             role="tablist"
             aria-label="Payment method"
           >
-            {methods.map(
-              (paymentMethod) => {
-                const active =
-                  paymentMethod ===
-                  method;
+            {methods.map((paymentMethod) => {
+              const active =
+                paymentMethod === method;
 
-                return (
-                  <button
-                    key={paymentMethod}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    disabled={
-                      !canChangeMethod
-                    }
-                    className={`payment-method ${
-                      active
-                        ? "is-active"
-                        : ""
-                    }`}
-                    onClick={() =>
-                      setMethod(
-                        paymentMethod
-                      )
-                    }
-                  >
-                    <span className="payment-method__icon">
-                      {paymentMethod ===
-                        "card" && "▣"}
+              return (
+                <button
+                  key={paymentMethod}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  disabled={!canChangeMethod}
+                  className={`payment-method ${
+                    active ? "is-active" : ""
+                  }`}
+                  onClick={() =>
+                    setMethod(paymentMethod)
+                  }
+                >
+                  <span className="payment-method__icon">
+                    {paymentMethod === "card" && "▣"}
+                    {paymentMethod === "upi" && "⌁"}
+                    {paymentMethod === "wallet" && "▱"}
+                  </span>
 
-                      {paymentMethod ===
-                        "upi" && "⌁"}
-
-                      {paymentMethod ===
-                        "wallet" && "▱"}
-                    </span>
-
-                    <span>
-                      {
-                        methodLabels[
-                          paymentMethod
-                        ]
-                      }
-                    </span>
-                  </button>
-                );
-              }
-            )}
+                  {methodLabels[paymentMethod]}
+                </button>
+              );
+            })}
           </div>
 
           <div
@@ -266,40 +201,40 @@ export default function PaymentToy({
           >
             <PaymentToyCanvas
               method={method}
-              status={
-                paymentState.status
-              }
-              onChargeStart={
-                handleChargeStart
-              }
-              onChargeCancel={
-                handleChargeCancel
-              }
-              onChargeComplete={
-                handleChargeComplete
-              }
+              status={paymentState.status}
+              onChargeStart={handleChargeStart}
+              onChargeCancel={handleChargeCancel}
+              onChargeComplete={handleChargeComplete}
             />
 
-            <div className="payment-stage__content">
-              <span className="payment-stage__label">
-                {method === "card" &&
-                  "CARD PAYMENT"}
-
-                {method === "upi" &&
-                  "UPI PAYMENT"}
-
-                {method ===
-                  "wallet" &&
-                  "WALLET PAYMENT"}
+            <div className="payment-stage__overlay">
+              <span className="payment-stage__method">
+                {method === "card" && "CARD PAYMENT"}
+                {method === "upi" && "UPI PAYMENT"}
+                {method === "wallet" && "WALLET PAYMENT"}
               </span>
 
-              <span className="payment-stage__amount">
+              <strong className="payment-stage__amount">
                 ₹{amount}
-              </span>
+              </strong>
 
-              <span className="payment-stage__hint">
+              <span className="payment-stage__status">
                 {currentCopy.title}
               </span>
+
+              <span className="payment-stage__subtitle">
+                {currentCopy.subtitle}
+              </span>
+            </div>
+
+            <div className="payment-stage__progress">
+              <span
+                className={
+                  paymentState.status === "charging"
+                    ? "is-running"
+                    : ""
+                }
+              />
             </div>
           </div>
 
@@ -307,9 +242,7 @@ export default function PaymentToy({
             {method === "card" && (
               <>
                 <div className="payment-details__field payment-details__field--full">
-                  <label>
-                    Card number
-                  </label>
+                  <label>Card number</label>
 
                   <div className="payment-details__input">
                     <span>
@@ -324,9 +257,7 @@ export default function PaymentToy({
 
                 <div className="payment-details__row">
                   <div className="payment-details__field">
-                    <label>
-                      Expiry date
-                    </label>
+                    <label>Expiry date</label>
 
                     <div className="payment-details__input">
                       12 / 28
@@ -334,9 +265,7 @@ export default function PaymentToy({
                   </div>
 
                   <div className="payment-details__field">
-                    <label>
-                      Security code
-                    </label>
+                    <label>Security code</label>
 
                     <div className="payment-details__input">
                       •••
@@ -348,9 +277,7 @@ export default function PaymentToy({
 
             {method === "upi" && (
               <div className="payment-details__field payment-details__field--full">
-                <label>
-                  UPI ID
-                </label>
+                <label>UPI ID</label>
 
                 <div className="payment-details__input">
                   ankita@upi
@@ -360,63 +287,43 @@ export default function PaymentToy({
 
             {method === "wallet" && (
               <div className="wallet-options">
-                <button
-                  type="button"
-                  className="wallet-option is-selected"
-                >
-                  <span>
-                    ◉
-                  </span>
-
+                <div className="wallet-option is-selected">
+                  <span>◉</span>
                   Preferred wallet
-                </button>
+                </div>
 
-                <button
-                  type="button"
-                  className="wallet-option"
-                >
-                  <span>
-                    +
-                  </span>
-
+                <div className="wallet-option">
+                  <span>+</span>
                   Add another wallet
-                </button>
+                </div>
               </div>
             )}
           </div>
 
-          <div className="payment-action">
-            <div className="payment-action__copy">
-              <strong>
-                {currentCopy.title}
-              </strong>
+          <div className="payment-instruction">
+            <div>
+              <strong>{currentCopy.title}</strong>
 
-              <span>
-                {currentCopy.subtitle}
-              </span>
+              <span>{currentCopy.subtitle}</span>
             </div>
 
-            <span className="payment-action__amount">
+            <strong className="payment-instruction__amount">
               ₹{amount}
-            </span>
+            </strong>
           </div>
 
           <button
             type="button"
+            disabled={!canChangeMethod}
             className={`failure-toggle ${
-              simulateFailure
-                ? "is-active"
-                : ""
+              simulateFailure ? "is-active" : ""
             }`}
-            disabled={
-              !canChangeMethod
-            }
             onClick={() =>
-              setSimulateFailure(
-                (value) => !value
-              )
+              setSimulateFailure((value) => !value)
             }
           >
+            <span className="failure-toggle__dot" />
+
             {simulateFailure
               ? "Failure simulation on"
               : "Demo failure state"}
@@ -440,48 +347,28 @@ export default function PaymentToy({
             </div>
 
             <div>
-              <strong>
-                Pro Plan
-              </strong>
-
-              <span>
-                One-time purchase
-              </span>
+              <strong>Pro Plan</strong>
+              <span>One-time purchase</span>
             </div>
           </div>
 
           <div className="summary__divider" />
 
           <div className="summary__line">
-            <span>
-              Subtotal
-            </span>
-
-            <span>
-              ₹{amount}
-            </span>
+            <span>Subtotal</span>
+            <span>₹{amount}</span>
           </div>
 
           <div className="summary__line">
-            <span>
-              Tax
-            </span>
-
-            <span>
-              ₹0
-            </span>
+            <span>Tax</span>
+            <span>₹0</span>
           </div>
 
           <div className="summary__divider" />
 
           <div className="summary__total">
-            <span>
-              Total
-            </span>
-
-            <strong>
-              ₹{amount}
-            </strong>
+            <span>Total</span>
+            <strong>₹{amount}</strong>
           </div>
 
           <div className="summary__footer">
@@ -490,25 +377,16 @@ export default function PaymentToy({
             </span>
 
             <span>
-              Secure payment powered by
-              Dodo Payments
+              Secure payment powered by Dodo Payments
             </span>
           </div>
         </aside>
       </main>
 
       <footer className="checkout-footer">
-        <span>
-          Payments secured by Dodo
-        </span>
-
-        <span>
-          Privacy
-        </span>
-
-        <span>
-          Terms
-        </span>
+        <span>Payments secured by Dodo</span>
+        <span>Privacy</span>
+        <span>Terms</span>
       </footer>
     </div>
   );

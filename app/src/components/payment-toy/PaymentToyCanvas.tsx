@@ -1,22 +1,14 @@
 "use client";
 
-import {
-  useEffect,
-  useRef,
-} from "react";
+import { useEffect, useRef } from "react";
 
 import {
   vertexShaderSource,
   fragmentShaderSource,
 } from "./paymentToy.shader";
 
-import type {
-  PaymentState,
-} from "./paymentToy.reducer";
-
-import type {
-  PaymentMethod,
-} from "./paymentToy.types";
+import type { PaymentMethod } from "./paymentToy.types";
+import type { PaymentState } from "./paymentToy.reducer";
 
 type PaymentToyCanvasProps = {
   method: PaymentMethod;
@@ -31,37 +23,22 @@ function createShader(
   type: number,
   source: string
 ): WebGLShader {
-  const shader =
-    gl.createShader(type);
+  const shader = gl.createShader(type);
 
   if (!shader) {
-    throw new Error(
-      "Failed to create shader"
-    );
+    throw new Error("Failed to create shader");
   }
 
-  gl.shaderSource(
-    shader,
-    source
-  );
-
+  gl.shaderSource(shader, source);
   gl.compileShader(shader);
 
-  if (
-    !gl.getShaderParameter(
-      shader,
-      gl.COMPILE_STATUS
-    )
-  ) {
-    const error =
-      gl.getShaderInfoLog(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const error = gl.getShaderInfoLog(shader);
 
     gl.deleteShader(shader);
 
     throw new Error(
-      `Shader compilation failed:\n${
-        error ?? "Unknown error"
-      }`
+      `Shader compilation failed:\n${error ?? "Unknown error"}`
     );
   }
 
@@ -71,74 +48,42 @@ function createShader(
 function createProgram(
   gl: WebGLRenderingContext
 ): WebGLProgram {
-  const vertexShader =
-    createShader(
-      gl,
-      gl.VERTEX_SHADER,
-      vertexShaderSource
-    );
+  const vertexShader = createShader(
+    gl,
+    gl.VERTEX_SHADER,
+    vertexShaderSource
+  );
 
-  const fragmentShader =
-    createShader(
-      gl,
-      gl.FRAGMENT_SHADER,
-      fragmentShaderSource
-    );
+  const fragmentShader = createShader(
+    gl,
+    gl.FRAGMENT_SHADER,
+    fragmentShaderSource
+  );
 
-  const program =
-    gl.createProgram();
+  const program = gl.createProgram();
 
   if (!program) {
-    throw new Error(
-      "Failed to create WebGL program"
-    );
+    throw new Error("Failed to create WebGL program");
   }
 
-  gl.attachShader(
-    program,
-    vertexShader
-  );
-
-  gl.attachShader(
-    program,
-    fragmentShader
-  );
-
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
 
-  if (
-    !gl.getProgramParameter(
-      program,
-      gl.LINK_STATUS
-    )
-  ) {
-    const error =
-      gl.getProgramInfoLog(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const error = gl.getProgramInfoLog(program);
 
-    gl.deleteShader(
-      vertexShader
-    );
-
-    gl.deleteShader(
-      fragmentShader
-    );
-
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
     gl.deleteProgram(program);
 
     throw new Error(
-      `Program linking failed:\n${
-        error ?? "Unknown error"
-      }`
+      `Program linking failed:\n${error ?? "Unknown error"}`
     );
   }
 
-  gl.deleteShader(
-    vertexShader
-  );
-
-  gl.deleteShader(
-    fragmentShader
-  );
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
 
   return program;
 }
@@ -159,9 +104,9 @@ function methodToNumber(
 }
 
 function stateToNumber(
-  status: PaymentState
+  state: PaymentState
 ): number {
-  switch (status) {
+  switch (state) {
     case "idle":
       return 0;
 
@@ -187,31 +132,23 @@ export default function PaymentToyCanvas({
   onChargeComplete,
 }: PaymentToyCanvasProps) {
   const canvasRef =
-    useRef<HTMLCanvasElement>(
-      null
-    );
+    useRef<HTMLCanvasElement>(null);
 
-  const methodRef =
-    useRef(method);
+  const methodRef = useRef(method);
+  const statusRef = useRef(status);
 
-  const statusRef =
-    useRef(status);
-
-  const callbacksRef =
-    useRef({
-      onChargeStart,
-      onChargeCancel,
-      onChargeComplete,
-    });
+  const callbacksRef = useRef({
+    onChargeStart,
+    onChargeCancel,
+    onChargeComplete,
+  });
 
   useEffect(() => {
-    methodRef.current =
-      method;
+    methodRef.current = method;
   }, [method]);
 
   useEffect(() => {
-    statusRef.current =
-      status;
+    statusRef.current = status;
   }, [status]);
 
   useEffect(() => {
@@ -227,35 +164,26 @@ export default function PaymentToyCanvas({
   ]);
 
   useEffect(() => {
-    const canvas =
-      canvasRef.current;
+    const canvas = canvasRef.current;
 
     if (!canvas) {
       return;
     }
 
-    const gl =
-      canvas.getContext(
-        "webgl",
-        {
-          antialias: true,
-          alpha: false,
-        }
-      );
+    const gl = canvas.getContext("webgl", {
+      antialias: true,
+      alpha: false,
+    });
 
     if (!gl) {
-      console.error(
-        "WebGL is not supported."
-      );
-
+      console.error("WebGL is not supported.");
       return;
     }
 
     let program: WebGLProgram;
 
     try {
-      program =
-        createProgram(gl);
+      program = createProgram(gl);
     } catch (error) {
       console.error(error);
       return;
@@ -263,23 +191,14 @@ export default function PaymentToyCanvas({
 
     gl.useProgram(program);
 
-    const buffer =
-      gl.createBuffer();
+    const buffer = gl.createBuffer();
 
     if (!buffer) {
-      console.error(
-        "Failed to create WebGL buffer."
-      );
-
       gl.deleteProgram(program);
-
       return;
     }
 
-    gl.bindBuffer(
-      gl.ARRAY_BUFFER,
-      buffer
-    );
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
     gl.bufferData(
       gl.ARRAY_BUFFER,
@@ -297,9 +216,7 @@ export default function PaymentToyCanvas({
         "aPosition"
       );
 
-    if (
-      positionLocation === -1
-    ) {
+    if (positionLocation === -1) {
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
       return;
@@ -386,8 +303,7 @@ export default function PaymentToyCanvas({
         0,
         Math.min(
           1,
-          (event.clientX -
-            rect.left) /
+          (event.clientX - rect.left) /
             rect.width
         )
       );
@@ -397,8 +313,7 @@ export default function PaymentToyCanvas({
         Math.min(
           1,
           1 -
-            (event.clientY -
-              rect.top) /
+            (event.clientY - rect.top) /
               rect.height
         )
       );
@@ -419,98 +334,110 @@ export default function PaymentToyCanvas({
       }
     };
 
+    const springBack = () => {
+      cancelAnimationFrame(
+        chargeAnimationFrame
+      );
+
+      const start =
+        chargeRef.current;
+
+      const startTime =
+        performance.now();
+
+      const duration = 420;
+
+      const animate = () => {
+        const progress = Math.min(
+          (performance.now() - startTime) /
+            duration,
+          1
+        );
+
+        const eased =
+          1 -
+          Math.pow(1 - progress, 3);
+
+        chargeRef.current =
+          start * (1 - eased);
+
+        if (progress < 1) {
+          chargeAnimationFrame =
+            requestAnimationFrame(
+              animate
+            );
+        } else {
+          chargeRef.current = 0;
+        }
+      };
+
+      chargeAnimationFrame =
+        requestAnimationFrame(animate);
+    };
+
     const startCharging = (
       event?: PointerEvent
     ) => {
       if (
-        statusRef.current !==
-        "idle"
+        isHoldingRef.current ||
+        statusRef.current !== "idle"
       ) {
         return;
       }
 
-      if (isHoldingRef.current) {
-        return;
-      }
-
       if (event) {
-        updatePointerPosition(
-          event
-        );
+        updatePointerPosition(event);
 
         canvas.setPointerCapture(
           event.pointerId
         );
       }
 
-      isHoldingRef.current =
-        true;
+      isHoldingRef.current = true;
 
-      callbacksRef.current
-        .onChargeStart();
+      callbacksRef.current.onChargeStart();
 
       cancelAnimationFrame(
         chargeAnimationFrame
       );
 
-      const startCharge =
-        chargeRef.current;
-
       const startTime =
         performance.now();
 
-      const chargeDuration =
-        1200;
+      const duration = 1200;
 
-      const animateCharge =
-        () => {
-          if (
-            !isHoldingRef.current
-          ) {
-            return;
-          }
+      const animateCharge = () => {
+        if (!isHoldingRef.current) {
+          return;
+        }
 
-          const elapsed =
-            performance.now() -
-            startTime;
+        const progress = Math.min(
+          (performance.now() - startTime) /
+            duration,
+          1
+        );
 
-          const progress =
-            Math.min(
-              elapsed /
-                chargeDuration,
-              1
+        const eased =
+          progress * progress;
+
+        chargeRef.current = eased;
+
+        if (progress < 1) {
+          chargeAnimationFrame =
+            requestAnimationFrame(
+              animateCharge
             );
 
-          const eased =
-            progress * progress;
+          return;
+        }
 
-          chargeRef.current =
-            startCharge +
-            (1 - startCharge) *
-              eased;
+        chargeRef.current = 1;
+        isHoldingRef.current = false;
 
-          if (
-            progress < 1
-          ) {
-            chargeAnimationFrame =
-              requestAnimationFrame(
-                animateCharge
-              );
+        releasePointer();
 
-            return;
-          }
-
-          chargeRef.current =
-            1;
-
-          isHoldingRef.current =
-            false;
-
-          releasePointer();
-
-          callbacksRef.current
-            .onChargeComplete();
-        };
+        callbacksRef.current.onChargeComplete();
+      };
 
       chargeAnimationFrame =
         requestAnimationFrame(
@@ -521,111 +448,44 @@ export default function PaymentToyCanvas({
     const cancelCharging = (
       event?: PointerEvent
     ) => {
-      if (
-        !isHoldingRef.current
-      ) {
+      if (!isHoldingRef.current) {
         return;
       }
 
-      isHoldingRef.current =
-        false;
-
-      releasePointer(event);
+      isHoldingRef.current = false;
 
       cancelAnimationFrame(
         chargeAnimationFrame
       );
 
-      callbacksRef.current
-        .onChargeCancel();
+      releasePointer(event);
 
-      const startCharge =
-        chargeRef.current;
+      callbacksRef.current.onChargeCancel();
 
-      const startTime =
-        performance.now();
-
-      const springDuration =
-        500;
-
-      const animateSpring =
-        () => {
-          const elapsed =
-            performance.now() -
-            startTime;
-
-          const progress =
-            Math.min(
-              elapsed /
-                springDuration,
-              1
-            );
-
-          const eased =
-            1 -
-            Math.pow(
-              1 - progress,
-              3
-            );
-
-          chargeRef.current =
-            startCharge *
-            (1 - eased);
-
-          if (
-            progress < 1
-          ) {
-            chargeAnimationFrame =
-              requestAnimationFrame(
-                animateSpring
-              );
-          } else {
-            chargeRef.current =
-              0;
-          }
-        };
-
-      chargeAnimationFrame =
-        requestAnimationFrame(
-          animateSpring
-        );
+      springBack();
     };
 
     const handlePointerMove = (
       event: PointerEvent
     ) => {
-      updatePointerPosition(
-        event
-      );
+      updatePointerPosition(event);
     };
 
     const handlePointerDown = (
       event: PointerEvent
     ) => {
-      if (!event.isPrimary) {
-        return;
-      }
-
       startCharging(event);
     };
 
     const handlePointerUp = (
       event: PointerEvent
     ) => {
-      if (!event.isPrimary) {
-        return;
-      }
-
       cancelCharging(event);
     };
 
     const handlePointerCancel = (
       event: PointerEvent
     ) => {
-      if (!event.isPrimary) {
-        return;
-      }
-
       cancelCharging(event);
     };
 
@@ -686,36 +546,28 @@ export default function PaymentToyCanvas({
     );
 
     const resize = () => {
-      const dpr =
-        Math.min(
-          window.devicePixelRatio ||
-            1,
-          2
-        );
+      const dpr = Math.min(
+        window.devicePixelRatio || 1,
+        2
+      );
 
-      const width =
-        Math.max(
-          1,
-          Math.floor(
-            canvas.clientWidth *
-              dpr
-          )
-        );
+      const width = Math.max(
+        1,
+        Math.floor(
+          canvas.clientWidth * dpr
+        )
+      );
 
-      const height =
-        Math.max(
-          1,
-          Math.floor(
-            canvas.clientHeight *
-              dpr
-          )
-        );
+      const height = Math.max(
+        1,
+        Math.floor(
+          canvas.clientHeight * dpr
+        )
+      );
 
       if (
-        canvas.width !==
-          width ||
-        canvas.height !==
-          height
+        canvas.width !== width ||
+        canvas.height !== height
       ) {
         canvas.width = width;
         canvas.height = height;
@@ -744,9 +596,7 @@ export default function PaymentToyCanvas({
 
       gl.useProgram(program);
 
-      if (
-        resolutionLocation
-      ) {
+      if (resolutionLocation) {
         gl.uniform2f(
           resolutionLocation,
           canvas.width,
@@ -801,9 +651,7 @@ export default function PaymentToyCanvas({
       );
 
       animationFrameId =
-        requestAnimationFrame(
-          render
-        );
+        requestAnimationFrame(render);
     };
 
     resize();
@@ -862,8 +710,7 @@ export default function PaymentToyCanvas({
         height: "100%",
         touchAction: "none",
         userSelect: "none",
-        WebkitUserSelect:
-          "none",
+        WebkitUserSelect: "none",
       }}
     />
   );

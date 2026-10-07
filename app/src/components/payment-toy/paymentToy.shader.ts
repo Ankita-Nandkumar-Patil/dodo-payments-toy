@@ -16,10 +16,6 @@ export const fragmentShaderSource = `
   uniform float uCharge;
   uniform float uState;
 
-  // --------------------------------
-  // Utilities
-  // --------------------------------
-
   float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
@@ -53,8 +49,7 @@ export const fragmentShaderSource = `
     vec2 q =
       abs(p) - size + radius;
 
-    return
-      length(max(q, 0.0))
+    return length(max(q, 0.0))
       + min(max(q.x, q.y), 0.0)
       - radius;
   }
@@ -64,16 +59,10 @@ export const fragmentShaderSource = `
     vec2 center,
     float radius
   ) {
-    return
-      1.0 -
-      smoothstep(
-        radius,
-        radius + 0.008,
-        distance(p, center)
-      );
+    return length(p - center) - radius;
   }
 
-  float segment(
+  float lineSegment(
     vec2 p,
     vec2 a,
     vec2 b,
@@ -82,49 +71,223 @@ export const fragmentShaderSource = `
     vec2 pa = p - a;
     vec2 ba = b - a;
 
-    float h =
-      clamp(
-        dot(pa, ba) /
-          dot(ba, ba),
-        0.0,
-        1.0
-      );
+    float h = clamp(
+      dot(pa, ba) / dot(ba, ba),
+      0.0,
+      1.0
+    );
 
-    return
-      1.0 -
-      smoothstep(
-        width,
-        width + 0.008,
-        length(pa - ba * h)
-      );
+    return length(pa - ba * h) - width;
   }
 
-  // --------------------------------
-  // Card
-  // --------------------------------
+  float finder(
+    vec2 p,
+    vec2 origin,
+    float size
+  ) {
+    vec2 q = p - origin;
+
+    float outer =
+      step(0.0, q.x) *
+      step(q.x, size) *
+      step(0.0, q.y) *
+      step(q.y, size);
+
+    float inner =
+      step(0.13 * size, q.x) *
+      step(q.x, 0.87 * size) *
+      step(0.13 * size, q.y) *
+      step(q.y, 0.87 * size);
+
+    float core =
+      step(0.32 * size, q.x) *
+      step(q.x, 0.68 * size) *
+      step(0.32 * size, q.y) *
+      step(q.y, 0.68 * size);
+
+    return outer *
+      (1.0 - inner + core);
+  }
 
   vec3 cardMaterial(
     vec2 uv,
     vec2 mouse
   ) {
-    vec3 base =
-      mix(
-        vec3(0.055, 0.065, 0.09),
-        vec3(0.16, 0.18, 0.23),
-        uv.y
+    float n = noise(uv * 9.0);
+
+    vec3 base = mix(
+      vec3(0.045, 0.055, 0.075),
+      vec3(0.28, 0.31, 0.38),
+      uv.x
+    );
+
+    float brush = noise(
+      vec2(
+        uv.x * 80.0,
+        uv.y * 4.0
+      )
+    );
+
+    base += brush * 0.025;
+    base += n * 0.018;
+
+    float mouseGlow =
+      1.0 -
+      smoothstep(
+        0.0,
+        0.48,
+        distance(uv, mouse)
       );
 
-    float brushed =
-      noise(
-        vec2(
-          uv.x * 90.0,
-          uv.y * 5.0
+    base += mouseGlow * 0.25;
+
+    // Card chip.
+    float chip =
+      1.0 -
+      smoothstep(
+        0.0,
+        0.012,
+        roundedBox(
+          uv - vec2(0.19, 0.68),
+          vec2(0.09, 0.055),
+          0.018
         )
       );
 
-    base += brushed * 0.025;
+    base = mix(
+      base,
+      vec3(0.64, 0.49, 0.22),
+      chip
+    );
 
-    float mouseGlow =
+    // Contactless symbol.
+    float contactless =
+      1.0 -
+      smoothstep(
+        0.0,
+        0.012,
+        abs(
+          distance(
+            uv,
+            vec2(0.76, 0.69)
+          ) - 0.055
+        )
+      );
+
+    base += contactless *
+      vec3(0.9);
+
+    return base;
+  }
+
+  vec3 upiMaterial(
+    vec2 uv,
+    vec2 mouse
+  ) {
+    vec2 grid = uv * 22.0;
+    vec2 cell = floor(grid);
+    vec2 local = fract(grid);
+
+    float pattern =
+      step(0.56, hash(cell));
+
+    float finderA =
+      finder(
+        uv,
+        vec2(0.06, 0.68),
+        0.24
+      );
+
+    float finderB =
+      finder(
+        uv,
+        vec2(0.70, 0.68),
+        0.24
+      );
+
+    float finderC =
+      finder(
+        uv,
+        vec2(0.06, 0.08),
+        0.24
+      );
+
+    float qr =
+      max(
+        pattern,
+        max(
+          finderA,
+          max(finderB, finderC)
+        )
+      );
+
+    float gaps =
+      step(0.12, local.x) *
+      step(0.12, local.y);
+
+    qr *= gaps;
+
+    vec3 dark =
+      vec3(0.035, 0.04, 0.05);
+
+    vec3 light =
+      vec3(0.86, 0.89, 0.84);
+
+    vec3 base =
+      mix(light, dark, qr);
+
+    float glow =
+      1.0 -
+      smoothstep(
+        0.0,
+        0.5,
+        distance(uv, mouse)
+      );
+
+    base += glow * 0.12;
+
+    return base;
+  }
+
+  vec3 walletMaterial(
+    vec2 uv,
+    vec2 mouse
+  ) {
+    vec3 base = mix(
+      vec3(0.055, 0.06, 0.075),
+      vec3(0.23, 0.25, 0.29),
+      uv.y
+    );
+
+    float flap =
+      1.0 -
+      smoothstep(
+        0.0,
+        0.018,
+        abs(uv.y - 0.37)
+      );
+
+    base += flap * 0.10;
+
+    float coin =
+      1.0 -
+      smoothstep(
+        0.0,
+        0.018,
+        circle(
+          uv,
+          vec2(0.70, 0.34),
+          0.10
+        )
+      );
+
+    base = mix(
+      base,
+      vec3(0.76, 0.61, 0.22),
+      coin
+    );
+
+    float glow =
       1.0 -
       smoothstep(
         0.0,
@@ -132,381 +295,33 @@ export const fragmentShaderSource = `
         distance(uv, mouse)
       );
 
-    base +=
-      mouseGlow *
-      vec3(
-        0.10,
-        0.12,
-        0.16
-      );
-
-    // Chip.
-    float chip =
-      1.0 -
-      smoothstep(
-        0.0,
-        0.01,
-        roundedBox(
-          uv - vec2(0.20, 0.64),
-          vec2(0.075, 0.052),
-          0.018
-        )
-      );
-
-    vec3 chipColor =
-      vec3(
-        0.70,
-        0.58,
-        0.30
-      );
-
-    base =
-      mix(
-        base,
-        chipColor,
-        chip * 0.75
-      );
-
-    // Chip lines.
-    float chipLine =
-      1.0 -
-      smoothstep(
-        0.0,
-        0.012,
-        abs(
-          uv.x - 0.20
-        )
-      );
-
-    chipLine *=
-      smoothstep(
-        0.58,
-        0.60,
-        uv.y
-      ) *
-      (1.0 -
-        smoothstep(
-          0.68,
-          0.70,
-          uv.y
-        ));
-
-    base +=
-      chipLine *
-      chip *
-      0.12;
-
-    // Contactless symbol.
-    float contactless =
-      segment(
-        uv,
-        vec2(0.77, 0.65),
-        vec2(0.79, 0.65),
-        0.012
-      );
-
-    contactless +=
-      segment(
-        uv,
-        vec2(0.79, 0.67),
-        vec2(0.82, 0.67),
-        0.009
-      );
-
-    base +=
-      contactless *
-      vec3(
-        0.75,
-        0.78,
-        0.82
-      );
+    base += glow * 0.22;
 
     return base;
   }
-
-  // --------------------------------
-  // UPI / QR
-  // --------------------------------
-
-  float finder(
-    vec2 cell,
-    vec2 origin
-  ) {
-    vec2 local =
-      cell - origin;
-
-    if (
-      local.x < 0.0 ||
-      local.x > 6.0 ||
-      local.y < 0.0 ||
-      local.y > 6.0
-    ) {
-      return 0.0;
-    }
-
-    float outer =
-      step(0.0, local.x) *
-      step(local.x, 6.0) *
-      step(0.0, local.y) *
-      step(local.y, 6.0);
-
-    float border =
-      step(local.x, 1.0) +
-      step(5.0, local.x) +
-      step(local.y, 1.0) +
-      step(5.0, local.y);
-
-    float center =
-      step(2.0, local.x) *
-      step(local.x, 4.0) *
-      step(2.0, local.y) *
-      step(local.y, 4.0);
-
-    return outer *
-      clamp(
-        max(
-          step(1.0, border),
-          center
-        ),
-        0.0,
-        1.0
-      );
-  }
-
-  vec3 upiMaterial(
-    vec2 uv,
-    vec2 mouse
-  ) {
-    vec3 base =
-      vec3(
-        0.035,
-        0.045,
-        0.055
-      );
-
-    vec2 qr =
-      (uv - 0.5) *
-      1.25 +
-      0.5;
-
-    if (
-      qr.x > 0.0 &&
-      qr.x < 1.0 &&
-      qr.y > 0.0 &&
-      qr.y < 1.0
-    ) {
-      vec2 grid =
-        floor(qr * 21.0);
-
-      vec2 cell =
-        fract(qr * 21.0);
-
-      float pattern =
-        step(
-          0.58,
-          hash(grid)
-        );
-
-      pattern =
-        max(
-          pattern,
-          finder(
-            grid,
-            vec2(0.0, 0.0)
-          )
-        );
-
-      pattern =
-        max(
-          pattern,
-          finder(
-            grid,
-            vec2(14.0, 0.0)
-          )
-        );
-
-      pattern =
-        max(
-          pattern,
-          finder(
-            grid,
-            vec2(0.0, 14.0)
-          )
-        );
-
-      float gap =
-        smoothstep(
-          0.03,
-          0.12,
-          cell.x
-        ) *
-        smoothstep(
-          0.03,
-          0.12,
-          cell.y
-        );
-
-      pattern *= gap;
-
-      base =
-        mix(
-          base,
-          vec3(
-            0.92,
-            0.94,
-            0.90
-          ),
-          pattern
-        );
-    }
-
-    float ripple =
-      1.0 -
-      smoothstep(
-        0.0,
-        0.45,
-        distance(
-          uv,
-          mouse
-        )
-      );
-
-    base +=
-      ripple *
-      0.08;
-
-    return base;
-  }
-
-  // --------------------------------
-  // Wallet
-  // --------------------------------
-
-  vec3 walletMaterial(
-    vec2 uv,
-    vec2 mouse
-  ) {
-    vec3 base =
-      mix(
-        vec3(
-          0.045,
-          0.055,
-          0.065
-        ),
-        vec3(
-          0.14,
-          0.16,
-          0.18
-        ),
-        uv.y
-      );
-
-    float grain =
-      noise(
-        uv * 12.0
-      );
-
-    base +=
-      grain * 0.018;
-
-    float flap =
-      1.0 -
-      smoothstep(
-        0.0,
-        0.008,
-        roundedBox(
-          uv -
-            vec2(
-              0.50,
-              0.70
-            ),
-          vec2(
-            0.38,
-            0.11
-          ),
-          0.035
-        )
-      );
-
-    base +=
-      flap *
-      vec3(
-        0.04,
-        0.045,
-        0.05
-      );
-
-    float coin =
-      circle(
-        uv,
-        vec2(
-          0.50,
-          0.45
-        ),
-        0.075
-      );
-
-    base +=
-      coin *
-      vec3(
-        0.72,
-        0.76,
-        0.80
-      );
-
-    float mouseGlow =
-      1.0 -
-      smoothstep(
-        0.0,
-        0.5,
-        distance(
-          uv,
-          mouse
-        )
-      );
-
-    base +=
-      mouseGlow *
-      vec3(
-        0.08,
-        0.10,
-        0.12
-      );
-
-    return base;
-  }
-
-  // --------------------------------
-  // Main
-  // --------------------------------
 
   void main() {
     vec2 uv =
-      gl_FragCoord.xy /
-      uRes;
+      gl_FragCoord.xy / uRes;
 
     vec2 centered =
       uv - 0.5;
 
     centered.x *=
-      uRes.x /
-      uRes.y;
+      uRes.x / uRes.y;
 
-    // Payment surface.
-    vec2 objectCenter =
-      centered +
-      vec2(
-        0.0,
-        0.01
-      );
+    vec2 objectUV =
+      centered / vec2(1.48, 0.84);
+
+    objectUV += 0.5;
+
+    vec2 objectPosition =
+      centered;
 
     float objectDistance =
       roundedBox(
-        objectCenter,
-        vec2(
-          0.58,
-          0.32
-        ),
+        objectPosition,
+        vec2(0.45, 0.25),
         0.055
       );
 
@@ -518,18 +333,11 @@ export const fragmentShaderSource = `
         objectDistance
       );
 
-    // Soft shadow.
     float shadowDistance =
       roundedBox(
-        objectCenter +
-          vec2(
-            0.0,
-            0.035
-          ),
-        vec2(
-          0.58,
-          0.32
-        ),
+        objectPosition +
+        vec2(0.0, 0.025),
+        vec2(0.45, 0.25),
         0.055
       );
 
@@ -537,84 +345,46 @@ export const fragmentShaderSource = `
       1.0 -
       smoothstep(
         0.0,
-        0.11,
+        0.10,
         shadowDistance
       );
-
-    // UV inside payment surface.
-    vec2 objectUV =
-      objectCenter /
-      vec2(
-        0.58,
-        0.32
-      );
-
-    objectUV =
-      objectUV * 0.5 +
-      0.5;
-
-    // Cursor movement.
-    vec2 localMouse =
-      objectUV;
-
-    // Charge deformation.
-    float chargeInfluence =
-      uCharge *
-      (
-        1.0 -
-        smoothstep(
-          0.0,
-          0.65,
-          distance(
-            objectUV,
-            localMouse
-          )
-        )
-      );
-
-    objectUV +=
-      (
-        localMouse -
-        objectUV
-      ) *
-      chargeInfluence *
-      0.05;
 
     vec3 card =
       cardMaterial(
         objectUV,
-        localMouse
+        uMouse
       );
 
     vec3 upi =
       upiMaterial(
         objectUV,
-        localMouse
+        uMouse
       );
 
     vec3 wallet =
       walletMaterial(
         objectUV,
-        localMouse
+        uMouse
       );
 
     vec3 material;
 
-    if (
-      uMethod < 1.0
-    ) {
+    if (uMethod < 1.0) {
       material = card;
-    } else if (
-      uMethod < 2.0
-    ) {
+    } else if (uMethod < 2.0) {
       material = upi;
     } else {
       material = wallet;
     }
 
-    // --------------------------------
-    // Payment state
-    // --------------------------------
+    // Payment progress sweep.
+    float sweep =
+      smoothstep(
+        uCharge - 0.10,
+        uCharge,
+        objectUV.x
+      ) *
+      step(0.01, uCharge);
 
     vec3 accent =
       vec3(
@@ -623,268 +393,185 @@ export const fragmentShaderSource = `
         0.18
       );
 
-    vec3 success =
-      vec3(
-        0.38,
-        0.92,
-        0.55
+    material +=
+      sweep *
+      0.12;
+
+    material +=
+      sweep *
+      accent *
+      0.28;
+
+    // Subtle charge glow.
+    float chargeGlow =
+      uCharge *
+      (
+        0.5 +
+        0.5 *
+        sin(uTime * 7.0)
       );
 
-    vec3 warning =
-      vec3(
-        0.96,
-        0.66,
-        0.25
-      );
+    material +=
+      chargeGlow *
+      accent *
+      0.06;
 
-    vec3 error =
-      vec3(
-        0.96,
-        0.30,
-        0.30
-      );
-
-    // Charging energy.
-    if (
-      uState > 0.5 &&
-      uState < 1.5
-    ) {
-      float sweep =
-        fract(
-          uTime * 0.35
+    // Success.
+    if (uState > 1.5 && uState < 2.5) {
+      vec3 success =
+        vec3(
+          0.35,
+          0.92,
+          0.55
         );
 
-      float energy =
+      float ring =
         1.0 -
         smoothstep(
           0.0,
-          0.18,
+          0.025,
           abs(
-            objectUV.x -
-            sweep
+            distance(
+              objectUV,
+              vec2(0.5)
+            ) - 0.16
+          )
+        );
+
+      float checkA =
+        1.0 -
+        smoothstep(
+          0.0,
+          0.025,
+          lineSegment(
+            objectUV,
+            vec2(0.43, 0.50),
+            vec2(0.48, 0.45),
+            0.012
+          )
+        );
+
+      float checkB =
+        1.0 -
+        smoothstep(
+          0.0,
+          0.025,
+          lineSegment(
+            objectUV,
+            vec2(0.48, 0.45),
+            vec2(0.59, 0.57),
+            0.012
           )
         );
 
       material +=
-        energy *
-        uCharge *
-        accent *
-        0.16;
+        success *
+        ring *
+        0.55;
+
+      material +=
+        success *
+        max(checkA, checkB) *
+        0.9;
+    }
+
+    // Cancelled.
+    if (uState > 2.5 && uState < 3.5) {
+      vec3 warning =
+        vec3(
+          0.96,
+          0.66,
+          0.25
+        );
 
       float edge =
         1.0 -
         smoothstep(
           0.0,
           0.035,
-          abs(
-            objectDistance
-          )
-        );
-
-      material +=
-        edge *
-        accent *
-        uCharge *
-        0.25;
-    }
-
-    // Success.
-    if (
-      uState > 1.5 &&
-      uState < 2.5
-    ) {
-      float pulse =
-        0.5 +
-        0.5 *
-        sin(
-          uTime * 7.0
-        );
-
-      material =
-        mix(
-          material,
-          material +
-            success *
-            0.20,
-          0.7
-        );
-
-      float ring =
-        abs(
-          distance(
-            objectUV,
-            vec2(0.5)
-          ) -
-          0.18
-        );
-
-      material +=
-        success *
-        (
-          1.0 -
-          smoothstep(
-            0.0,
-            0.025,
-            ring
-          )
-        ) *
-        (0.25 + pulse * 0.15);
-
-      // Check mark.
-      float check =
-        max(
-          segment(
-            objectUV,
-            vec2(
-              0.42,
-              0.50
-            ),
-            vec2(
-              0.48,
-              0.44
-            ),
-            0.018
-          ),
-          segment(
-            objectUV,
-            vec2(
-              0.48,
-              0.44
-            ),
-            vec2(
-              0.59,
-              0.57
-            ),
-            0.018
-          )
-        );
-
-      material =
-        mix(
-          material,
-          success,
-          check
-        );
-    }
-
-    // Cancelled.
-    if (
-      uState > 2.5 &&
-      uState < 3.5
-    ) {
-      float edge =
-        1.0 -
-        smoothstep(
-          0.0,
-          0.04,
-          abs(
-            objectDistance
-          )
+          abs(objectDistance)
         );
 
       material +=
         warning *
         edge *
-        0.35;
+        0.75;
     }
 
     // Failed.
-    if (
-      uState > 3.5
-    ) {
+    if (uState > 3.5) {
+      vec3 error =
+        vec3(
+          0.96,
+          0.30,
+          0.30
+        );
+
       float edge =
         1.0 -
         smoothstep(
           0.0,
-          0.045,
-          abs(
-            objectDistance
+          0.035,
+          abs(objectDistance)
+        );
+
+      float crossA =
+        1.0 -
+        smoothstep(
+          0.0,
+          0.025,
+          lineSegment(
+            objectUV,
+            vec2(0.44, 0.44),
+            vec2(0.56, 0.56),
+            0.012
+          )
+        );
+
+      float crossB =
+        1.0 -
+        smoothstep(
+          0.0,
+          0.025,
+          lineSegment(
+            objectUV,
+            vec2(0.56, 0.44),
+            vec2(0.44, 0.56),
+            0.012
           )
         );
 
       material +=
         error *
         edge *
-        0.42;
+        0.75;
 
-      float cross =
-        max(
-          segment(
-            objectUV,
-            vec2(
-              0.43,
-              0.43
-            ),
-            vec2(
-              0.57,
-              0.57
-            ),
-            0.018
-          ),
-          segment(
-            objectUV,
-            vec2(
-              0.57,
-              0.43
-            ),
-            vec2(
-              0.43,
-              0.57
-            ),
-            0.018
-          )
-        );
-
-      material =
-        mix(
-          material,
-          error,
-          cross
-        );
+      material +=
+        error *
+        max(crossA, crossB) *
+        0.8;
     }
-
-    // Object edge.
-    float edge =
-      1.0 -
-      smoothstep(
-        0.0,
-        0.022,
-        abs(
-          objectDistance
-        )
-      );
-
-    material +=
-      edge *
-      vec3(
-        0.16,
-        0.17,
-        0.19
-      );
-
-    // --------------------------------
-    // Background
-    // --------------------------------
 
     vec3 background =
       vec3(
-        0.018,
-        0.021,
-        0.026
+        0.008,
+        0.009,
+        0.012
       );
 
-    float vignette =
+    float backgroundGlow =
       1.0 -
       smoothstep(
-        0.25,
-        0.9,
-        length(
-          centered
+        0.0,
+        0.75,
+        distance(
+          centered,
+          vec2(0.0)
         )
       );
 
     background +=
-      vignette *
+      backgroundGlow *
       vec3(
         0.012,
         0.014,
@@ -894,12 +581,8 @@ export const fragmentShaderSource = `
     background =
       mix(
         background,
-        vec3(
-          0.005,
-          0.006,
-          0.008
-        ),
-        shadow * 0.32
+        vec3(0.003),
+        shadow * 0.25
       );
 
     vec3 finalColor =

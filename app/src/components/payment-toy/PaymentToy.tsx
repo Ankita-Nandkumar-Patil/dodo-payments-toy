@@ -84,35 +84,43 @@ export default function PaymentToy({
 
   const handleChargeComplete = useCallback(() => {
     dispatch({
-      type: simulateFailure ? "FAIL" : "COMPLETE",
+      type: simulateFailure
+        ? "FAIL"
+        : "COMPLETE",
     });
   }, [simulateFailure]);
+
+  const resetPayment = useCallback(() => {
+    dispatch({
+      type: "RESET",
+    });
+  }, []);
 
   useEffect(() => {
     if (paymentState.status === "cancelled") {
       const timeout = window.setTimeout(() => {
-        dispatch({ type: "RESET" });
-      }, 900);
+        dispatch({
+          type: "RESET",
+        });
+      }, 1100);
 
-      return () => window.clearTimeout(timeout);
-    }
-
-    if (paymentState.status === "success") {
-      onPaymentComplete?.(method);
-
-      const timeout = window.setTimeout(() => {
-        dispatch({ type: "RESET" });
-      }, 1800);
-
-      return () => window.clearTimeout(timeout);
+      return () =>
+        window.clearTimeout(timeout);
     }
 
     if (paymentState.status === "failed") {
       const timeout = window.setTimeout(() => {
-        dispatch({ type: "RESET" });
-      }, 1600);
+        dispatch({
+          type: "RESET",
+        });
+      }, 3000);
 
-      return () => window.clearTimeout(timeout);
+      return () =>
+        window.clearTimeout(timeout);
+    }
+
+    if (paymentState.status === "success") {
+      onPaymentComplete?.(method);
     }
   }, [
     paymentState.status,
@@ -133,11 +141,29 @@ export default function PaymentToy({
           DODO
         </div>
 
-        <div className="checkout-header__secure">
-          <span className="checkout-header__check">
-            ✓
-          </span>
-          Secure checkout
+        <div className="checkout-header__actions">
+          <div className="checkout-header__secure">
+            <span className="checkout-header__check">
+              ✓
+            </span>
+            Secure checkout
+          </div>
+
+          <button
+            type="button"
+            className={`demo-trigger ${
+              simulateFailure ? "is-active" : ""
+            }`}
+            onClick={() =>
+              setSimulateFailure(
+                (value) => !value
+              )
+            }
+          >
+            <span className="demo-trigger__dot" />
+            Demo · Failure{" "}
+            {simulateFailure ? "ON" : "OFF"}
+          </button>
         </div>
       </header>
 
@@ -149,7 +175,9 @@ export default function PaymentToy({
                 Payment
               </span>
 
-              <h1>Complete your payment</h1>
+              <h1>
+                Complete your payment
+              </h1>
 
               <p>
                 Choose how you'd like to pay.
@@ -178,19 +206,32 @@ export default function PaymentToy({
                   aria-selected={active}
                   disabled={!canChangeMethod}
                   className={`payment-method ${
-                    active ? "is-active" : ""
+                    active
+                      ? "is-active"
+                      : ""
                   }`}
                   onClick={() =>
-                    setMethod(paymentMethod)
+                    setMethod(
+                      paymentMethod
+                    )
                   }
                 >
                   <span className="payment-method__icon">
-                    {paymentMethod === "card" && "▣"}
-                    {paymentMethod === "upi" && "⌁"}
-                    {paymentMethod === "wallet" && "▱"}
+                    {paymentMethod ===
+                      "card" && "▣"}
+
+                    {paymentMethod ===
+                      "upi" && "⌁"}
+
+                    {paymentMethod ===
+                      "wallet" && "▱"}
                   </span>
 
-                  {methodLabels[paymentMethod]}
+                  {
+                    methodLabels[
+                      paymentMethod
+                    ]
+                  }
                 </button>
               );
             })}
@@ -202,16 +243,27 @@ export default function PaymentToy({
             <PaymentToyCanvas
               method={method}
               status={paymentState.status}
-              onChargeStart={handleChargeStart}
-              onChargeCancel={handleChargeCancel}
-              onChargeComplete={handleChargeComplete}
+              onChargeStart={
+                handleChargeStart
+              }
+              onChargeCancel={
+                handleChargeCancel
+              }
+              onChargeComplete={
+                handleChargeComplete
+              }
             />
 
             <div className="payment-stage__overlay">
               <span className="payment-stage__method">
-                {method === "card" && "CARD PAYMENT"}
-                {method === "upi" && "UPI PAYMENT"}
-                {method === "wallet" && "WALLET PAYMENT"}
+                {method === "card" &&
+                  "CARD PAYMENT"}
+
+                {method === "upi" &&
+                  "UPI PAYMENT"}
+
+                {method === "wallet" &&
+                  "WALLET PAYMENT"}
               </span>
 
               <strong className="payment-stage__amount">
@@ -230,19 +282,33 @@ export default function PaymentToy({
             <div className="payment-stage__progress">
               <span
                 className={
-                  paymentState.status === "charging"
+                  paymentState.status ===
+                  "charging"
                     ? "is-running"
                     : ""
                 }
               />
             </div>
+
+            {paymentState.status ===
+              "success" && (
+              <button
+                type="button"
+                className="payment-stage__retry"
+                onClick={resetPayment}
+              >
+                Pay again
+              </button>
+            )}
           </div>
 
           <div className="payment-details">
             {method === "card" && (
               <>
                 <div className="payment-details__field payment-details__field--full">
-                  <label>Card number</label>
+                  <label>
+                    Card number
+                  </label>
 
                   <div className="payment-details__input">
                     <span>
@@ -257,7 +323,9 @@ export default function PaymentToy({
 
                 <div className="payment-details__row">
                   <div className="payment-details__field">
-                    <label>Expiry date</label>
+                    <label>
+                      Expiry date
+                    </label>
 
                     <div className="payment-details__input">
                       12 / 28
@@ -265,7 +333,9 @@ export default function PaymentToy({
                   </div>
 
                   <div className="payment-details__field">
-                    <label>Security code</label>
+                    <label>
+                      Security code
+                    </label>
 
                     <div className="payment-details__input">
                       •••
@@ -277,7 +347,9 @@ export default function PaymentToy({
 
             {method === "upi" && (
               <div className="payment-details__field payment-details__field--full">
-                <label>UPI ID</label>
+                <label>
+                  UPI ID
+                </label>
 
                 <div className="payment-details__input">
                   ankita@upi
@@ -302,32 +374,19 @@ export default function PaymentToy({
 
           <div className="payment-instruction">
             <div>
-              <strong>{currentCopy.title}</strong>
+              <strong>
+                {currentCopy.title}
+              </strong>
 
-              <span>{currentCopy.subtitle}</span>
+              <span>
+                {currentCopy.subtitle}
+              </span>
             </div>
 
             <strong className="payment-instruction__amount">
               ₹{amount}
             </strong>
           </div>
-
-          <button
-            type="button"
-            disabled={!canChangeMethod}
-            className={`failure-toggle ${
-              simulateFailure ? "is-active" : ""
-            }`}
-            onClick={() =>
-              setSimulateFailure((value) => !value)
-            }
-          >
-            <span className="failure-toggle__dot" />
-
-            {simulateFailure
-              ? "Failure simulation on"
-              : "Demo failure state"}
-          </button>
         </section>
 
         <aside className="checkout__summary">
@@ -347,8 +406,13 @@ export default function PaymentToy({
             </div>
 
             <div>
-              <strong>Pro Plan</strong>
-              <span>One-time purchase</span>
+              <strong>
+                Pro Plan
+              </strong>
+
+              <span>
+                One-time purchase
+              </span>
             </div>
           </div>
 
@@ -368,7 +432,10 @@ export default function PaymentToy({
 
           <div className="summary__total">
             <span>Total</span>
-            <strong>₹{amount}</strong>
+
+            <strong>
+              ₹{amount}
+            </strong>
           </div>
 
           <div className="summary__footer">
@@ -377,14 +444,18 @@ export default function PaymentToy({
             </span>
 
             <span>
-              Secure payment powered by Dodo Payments
+              Secure payment powered by
+              Dodo Payments
             </span>
           </div>
         </aside>
       </main>
 
       <footer className="checkout-footer">
-        <span>Payments secured by Dodo</span>
+        <span>
+          Payments secured by Dodo
+        </span>
+
         <span>Privacy</span>
         <span>Terms</span>
       </footer>

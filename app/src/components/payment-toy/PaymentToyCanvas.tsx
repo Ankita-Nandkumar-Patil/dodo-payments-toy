@@ -2,49 +2,16 @@
 
 import { useEffect, useRef } from "react";
 
-const vertexShaderSource = `
-  attribute vec2 aPosition;
-
-  void main() {
-    gl_Position = vec4(aPosition, 0.0, 1.0);
-  }
-`;
-
-const fragmentShaderSource = `
-  precision highp float;
-
-  uniform vec2 uRes;
-  uniform vec2 uMouse;
-  uniform float uTime;
-
-  void main() {
-    vec2 uv = gl_FragCoord.xy / uRes;
-
-    float mouseDistance = distance(uv, uMouse);
-
-    float glow = 1.0 - smoothstep(
-      0.0,
-      0.5,
-      mouseDistance
-    );
-
-    vec3 base = vec3(
-      uv.x,
-      uv.y,
-      0.15 + 0.1 * sin(uTime)
-    );
-
-    base += glow * 0.15;
-
-    gl_FragColor = vec4(base, 1.0);
-  }
-`;
+import {
+  vertexShaderSource,
+  fragmentShaderSource,
+} from "./paymentToy.shader";
 
 function createShader(
   gl: WebGLRenderingContext,
   type: number,
   source: string
-) {
+): WebGLShader {
   const shader = gl.createShader(type);
 
   if (!shader) {
@@ -60,7 +27,7 @@ function createShader(
     gl.deleteShader(shader);
 
     throw new Error(
-      error ?? "Shader compilation failed"
+      `Shader compilation failed:\n${error ?? "Unknown error"}`
     );
   }
 
@@ -68,44 +35,44 @@ function createShader(
 }
 
 function createProgram(
-  gl: WebGLRenderingContext,
-  vertexSource: string,
-  fragmentSource: string
-) {
+  gl: WebGLRenderingContext
+): WebGLProgram {
   const vertexShader = createShader(
     gl,
     gl.VERTEX_SHADER,
-    vertexSource
+    vertexShaderSource
   );
 
   const fragmentShader = createShader(
     gl,
     gl.FRAGMENT_SHADER,
-    fragmentSource
+    fragmentShaderSource
   );
 
   const program = gl.createProgram();
 
   if (!program) {
-    throw new Error(
-      "Failed to create WebGL program"
-    );
+    throw new Error("Failed to create WebGL program");
   }
 
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
-
   gl.linkProgram(program);
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     const error = gl.getProgramInfoLog(program);
 
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
     gl.deleteProgram(program);
 
     throw new Error(
-      error ?? "Program linking failed"
+      `Program linking failed:\n${error ?? "Unknown error"}`
     );
   }
+
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
 
   return program;
 }
@@ -116,35 +83,44 @@ export default function PaymentToyCanvas() {
   useEffect(() => {
     const canvas = canvasRef.current;
 
-    if (!canvas) return;
-
-    const gl = canvas.getContext("webgl");
-
-    if (!gl) {
-      console.error("WebGL is not supported");
+    if (!canvas) {
       return;
     }
 
-    const program = createProgram(
-      gl,
-      vertexShaderSource,
-      fragmentShaderSource
-    );
+    const gl = canvas.getContext("webgl", {
+      antialias: true,
+      alpha: false,
+    });
+
+    if (!gl) {
+      console.error("WebGL is not supported.");
+      return;
+    }
+
+    let program: WebGLProgram;
+
+    try {
+      program = createProgram(gl);
+    } catch (error) {
+      console.error(error);
+      return;
+    }
 
     gl.useProgram(program);
 
-    /*
-     * Fullscreen triangle
-     *
-     * One triangle covers the entire viewport.
-     * This avoids the extra vertex needed by a quad.
-     */
+    // --------------------------------
+    // Fullscreen triangle
+    // --------------------------------
+
     const buffer = gl.createBuffer();
 
-    gl.bindBuffer(
-      gl.ARRAY_BUFFER,
-      buffer
-    );
+    if (!buffer) {
+      console.error("Failed to create WebGL buffer.");
+      gl.deleteProgram(program);
+      return;
+    }
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
     gl.bufferData(
       gl.ARRAY_BUFFER,
@@ -162,6 +138,17 @@ export default function PaymentToyCanvas() {
         "aPosition"
       );
 
+    if (positionLocation === -1) {
+      console.error(
+        "Could not find aPosition attribute."
+      );
+
+      gl.deleteBuffer(buffer);
+      gl.deleteProgram(program);
+
+      return;
+    }
+
     gl.enableVertexAttribArray(
       positionLocation
     );
@@ -174,6 +161,10 @@ export default function PaymentToyCanvas() {
       0,
       0
     );
+
+    // --------------------------------
+    // Uniforms
+    // --------------------------------
 
     const resolutionLocation =
       gl.getUniformLocation(
@@ -193,16 +184,36 @@ export default function PaymentToyCanvas() {
         "uTime"
       );
 
+    const methodLocation =
+      gl.getUniformLocation(
+        program,
+        "uMethod"
+      );
+
+    // --------------------------------
+    // Runtime values
+    // --------------------------------
+
     const mouse = {
       x: 0.5,
       y: 0.5,
     };
+
+    let method = 0;
+
+    // --------------------------------
+    // Pointer
+    // --------------------------------
 
     const handlePointerMove = (
       event: PointerEvent
     ) => {
       const rect =
         canvas.getBoundingClientRect();
+
+      if (rect.width === 0 || rect.height === 0) {
+        return;
+      }
 
       mouse.x =
         (event.clientX - rect.left) /
@@ -219,18 +230,53 @@ export default function PaymentToyCanvas() {
       handlePointerMove
     );
 
+    // --------------------------------
+    // Development keyboard controls
+    // --------------------------------
+
+    const handleKeyDown = (
+      event: KeyboardEvent
+    ) => {
+      if (event.key === "1") {
+        method = 0;
+      }
+
+      if (event.key === "2") {
+        method = 1;
+      }
+
+      if (event.key === "3") {
+        method = 2;
+      }
+    };
+
+    window.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    // --------------------------------
+    // Resize
+    // --------------------------------
+
     const resize = () => {
       const dpr = Math.min(
-        window.devicePixelRatio,
+        window.devicePixelRatio || 1,
         2
       );
 
-      const width = Math.floor(
-        canvas.clientWidth * dpr
+      const width = Math.max(
+        1,
+        Math.floor(
+          canvas.clientWidth * dpr
+        )
       );
 
-      const height = Math.floor(
-        canvas.clientHeight * dpr
+      const height = Math.max(
+        1,
+        Math.floor(
+          canvas.clientHeight * dpr
+        )
       );
 
       if (
@@ -243,15 +289,18 @@ export default function PaymentToyCanvas() {
         gl.viewport(
           0,
           0,
-          canvas.width,
-          canvas.height
+          width,
+          height
         );
       }
     };
 
-    const startTime = performance.now();
+    // --------------------------------
+    // Render loop
+    // --------------------------------
 
-    let animationFrame = 0;
+    let animationFrameId = 0;
+    const startTime = performance.now();
 
     const render = () => {
       resize();
@@ -260,22 +309,37 @@ export default function PaymentToyCanvas() {
         (performance.now() - startTime) /
         1000;
 
-      gl.uniform2f(
-        resolutionLocation,
-        canvas.width,
-        canvas.height
-      );
+      gl.useProgram(program);
 
-      gl.uniform2f(
-        mouseLocation,
-        mouse.x,
-        mouse.y
-      );
+      if (resolutionLocation) {
+        gl.uniform2f(
+          resolutionLocation,
+          canvas.width,
+          canvas.height
+        );
+      }
 
-      gl.uniform1f(
-        timeLocation,
-        elapsed
-      );
+      if (mouseLocation) {
+        gl.uniform2f(
+          mouseLocation,
+          mouse.x,
+          mouse.y
+        );
+      }
+
+      if (timeLocation) {
+        gl.uniform1f(
+          timeLocation,
+          elapsed
+        );
+      }
+
+      if (methodLocation) {
+        gl.uniform1f(
+          methodLocation,
+          method
+        );
+      }
 
       gl.drawArrays(
         gl.TRIANGLES,
@@ -283,15 +347,20 @@ export default function PaymentToyCanvas() {
         3
       );
 
-      animationFrame =
+      animationFrameId =
         requestAnimationFrame(render);
     };
 
+    resize();
     render();
+
+    // --------------------------------
+    // Cleanup
+    // --------------------------------
 
     return () => {
       cancelAnimationFrame(
-        animationFrame
+        animationFrameId
       );
 
       canvas.removeEventListener(
@@ -299,8 +368,13 @@ export default function PaymentToyCanvas() {
         handlePointerMove
       );
 
-      gl.deleteProgram(program);
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+
       gl.deleteBuffer(buffer);
+      gl.deleteProgram(program);
     };
   }, []);
 
@@ -308,9 +382,9 @@ export default function PaymentToyCanvas() {
     <canvas
       ref={canvasRef}
       style={{
+        display: "block",
         width: "100%",
         height: "100%",
-        display: "block",
       }}
     />
   );

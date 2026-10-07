@@ -7,6 +7,15 @@ import {
   fragmentShaderSource,
 } from "./paymentToy.shader";
 
+import type { PaymentMethod } from "./paymentToy.types";
+
+type PaymentToyCanvasProps = {
+  method: PaymentMethod;
+  onChargeStart: () => void;
+  onChargeCancel: () => void;
+  onChargeComplete: () => void;
+};
+
 function createShader(
   gl: WebGLRenderingContext,
   type: number,
@@ -72,16 +81,59 @@ function createProgram(
     );
   }
 
-  // Once linked into the program, these shader objects
-  // are no longer needed directly.
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
 
   return program;
 }
 
-export default function PaymentToyCanvas() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+function methodToNumber(
+  method: PaymentMethod
+): number {
+  switch (method) {
+    case "card":
+      return 0;
+
+    case "upi":
+      return 1;
+
+    case "wallet":
+      return 2;
+  }
+}
+
+export default function PaymentToyCanvas({
+  method,
+  onChargeStart,
+  onChargeCancel,
+  onChargeComplete,
+}: PaymentToyCanvasProps) {
+  const canvasRef =
+    useRef<HTMLCanvasElement>(null);
+
+  const methodRef = useRef(method);
+
+  useEffect(() => {
+    methodRef.current = method;
+  }, [method]);
+  
+  const callbacksRef = useRef({
+    onChargeStart,
+    onChargeCancel,
+    onChargeComplete,
+  });
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onChargeStart,
+      onChargeCancel,
+      onChargeComplete,
+    };
+  }, [
+    onChargeStart,
+    onChargeCancel,
+    onChargeComplete,
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -96,7 +148,10 @@ export default function PaymentToyCanvas() {
     });
 
     if (!gl) {
-      console.error("WebGL is not supported.");
+      console.error(
+        "WebGL is not supported."
+      );
+
       return;
     }
 
@@ -111,15 +166,15 @@ export default function PaymentToyCanvas() {
 
     gl.useProgram(program);
 
-    // --------------------------------
-    // Fullscreen triangle
-    // --------------------------------
-
     const buffer = gl.createBuffer();
 
     if (!buffer) {
-      console.error("Failed to create WebGL buffer.");
+      console.error(
+        "Failed to create WebGL buffer."
+      );
+
       gl.deleteProgram(program);
+
       return;
     }
 
@@ -168,10 +223,6 @@ export default function PaymentToyCanvas() {
       0
     );
 
-    // --------------------------------
-    // Uniform locations
-    // --------------------------------
-
     const resolutionLocation =
       gl.getUniformLocation(
         program,
@@ -202,16 +253,10 @@ export default function PaymentToyCanvas() {
         "uCharge"
       );
 
-    // --------------------------------
-    // Runtime values
-    // --------------------------------
-
     const mouse = {
       x: 0.5,
       y: 0.5,
     };
-
-    let method = 0;
 
     const chargeRef = {
       current: 0,
@@ -222,10 +267,6 @@ export default function PaymentToyCanvas() {
     };
 
     let chargeAnimationFrame = 0;
-
-    // --------------------------------
-    // Mouse / touch position
-    // --------------------------------
 
     const updatePointerPosition = (
       event: PointerEvent
@@ -260,15 +301,20 @@ export default function PaymentToyCanvas() {
       );
     };
 
-    const handlePointerMove = (
-      event: PointerEvent
+    const releasePointer = (
+      event?: PointerEvent
     ) => {
-      updatePointerPosition(event);
+      if (
+        event &&
+        canvas.hasPointerCapture(
+          event.pointerId
+        )
+      ) {
+        canvas.releasePointerCapture(
+          event.pointerId
+        );
+      }
     };
-
-    // --------------------------------
-    // Start charging
-    // --------------------------------
 
     const startCharging = (
       event?: PointerEvent
@@ -280,14 +326,14 @@ export default function PaymentToyCanvas() {
       if (event) {
         updatePointerPosition(event);
 
-        // Keep receiving pointerup even if
-        // the pointer leaves the canvas.
         canvas.setPointerCapture(
           event.pointerId
         );
       }
 
       isHoldingRef.current = true;
+
+      callbacksRef.current.onChargeStart();
 
       cancelAnimationFrame(
         chargeAnimationFrame
@@ -315,7 +361,6 @@ export default function PaymentToyCanvas() {
           1
         );
 
-        // Ease-in.
         const eased =
           progress * progress;
 
@@ -329,9 +374,17 @@ export default function PaymentToyCanvas() {
             requestAnimationFrame(
               animateCharge
             );
-        } else {
-          chargeRef.current = 1;
+          return;
         }
+
+        chargeRef.current = 1;
+
+        isHoldingRef.current = false;
+
+        releasePointer();
+
+        callbacksRef.current
+          .onChargeComplete();
       };
 
       chargeAnimationFrame =
@@ -340,11 +393,7 @@ export default function PaymentToyCanvas() {
         );
     };
 
-    // --------------------------------
-    // Spring back
-    // --------------------------------
-
-    const releaseCharging = (
+    const cancelCharging = (
       event?: PointerEvent
     ) => {
       if (!isHoldingRef.current) {
@@ -353,20 +402,13 @@ export default function PaymentToyCanvas() {
 
       isHoldingRef.current = false;
 
-      if (
-        event &&
-        canvas.hasPointerCapture(
-          event.pointerId
-        )
-      ) {
-        canvas.releasePointerCapture(
-          event.pointerId
-        );
-      }
+      releasePointer(event);
 
       cancelAnimationFrame(
         chargeAnimationFrame
       );
+
+      callbacksRef.current.onChargeCancel();
 
       const startCharge =
         chargeRef.current;
@@ -386,7 +428,6 @@ export default function PaymentToyCanvas() {
           1
         );
 
-        // Smooth ease-out.
         const eased =
           1 -
           Math.pow(
@@ -414,14 +455,15 @@ export default function PaymentToyCanvas() {
         );
     };
 
-    // --------------------------------
-    // Pointer interaction
-    // --------------------------------
+    const handlePointerMove = (
+      event: PointerEvent
+    ) => {
+      updatePointerPosition(event);
+    };
 
     const handlePointerDown = (
       event: PointerEvent
     ) => {
-      // Only react to primary pointer.
       if (!event.isPrimary) {
         return;
       }
@@ -436,7 +478,7 @@ export default function PaymentToyCanvas() {
         return;
       }
 
-      releaseCharging(event);
+      cancelCharging(event);
     };
 
     const handlePointerCancel = (
@@ -446,7 +488,7 @@ export default function PaymentToyCanvas() {
         return;
       }
 
-      releaseCharging(event);
+      cancelCharging(event);
     };
 
     canvas.addEventListener(
@@ -469,31 +511,16 @@ export default function PaymentToyCanvas() {
       handlePointerCancel
     );
 
-    // --------------------------------
-    // Development keyboard controls
-    // --------------------------------
-
     const handleKeyDown = (
       event: KeyboardEvent
     ) => {
-      if (
-        event.key === "1" ||
-        event.key === "2" ||
-        event.key === "3"
-      ) {
-        method =
-          Number(event.key) - 1;
-      }
-
       if (
         event.key === " " ||
         event.key === "Enter"
       ) {
         event.preventDefault();
 
-        if (!isHoldingRef.current) {
-          startCharging();
-        }
+        startCharging();
       }
     };
 
@@ -506,7 +533,7 @@ export default function PaymentToyCanvas() {
       ) {
         event.preventDefault();
 
-        releaseCharging();
+        cancelCharging();
       }
     };
 
@@ -519,10 +546,6 @@ export default function PaymentToyCanvas() {
       "keyup",
       handleKeyUp
     );
-
-    // --------------------------------
-    // Resize
-    // --------------------------------
 
     const resize = () => {
       const dpr = Math.min(
@@ -559,10 +582,6 @@ export default function PaymentToyCanvas() {
         );
       }
     };
-
-    // --------------------------------
-    // Render loop
-    // --------------------------------
 
     let animationFrameId = 0;
 
@@ -605,7 +624,9 @@ export default function PaymentToyCanvas() {
       if (methodLocation) {
         gl.uniform1f(
           methodLocation,
-          method
+          methodToNumber(
+            methodRef.current
+          )
         );
       }
 
@@ -628,10 +649,6 @@ export default function PaymentToyCanvas() {
 
     resize();
     render();
-
-    // --------------------------------
-    // Cleanup
-    // --------------------------------
 
     return () => {
       cancelAnimationFrame(
